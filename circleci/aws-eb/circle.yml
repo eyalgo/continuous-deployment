@@ -1,0 +1,38 @@
+machine:
+  services:
+# This is a Docker deployment
+    - docker
+  environment:
+# Setting the tag for Docker-hub
+    TAG: $CIRCLE_BRANCH-$CIRCLE_SHA1
+# MY_IMAGE_NAME is hard coded in this file. The project’s environment variables do not pass at this stage.
+    DOCKER_IMAGE: MY_ORGANIZATION/MY_IMAGE_NAME:$CIRCLE_BRANCH-$CIRCLE_SHA1
+
+deployment:
+# An example for on environment
+  staging:
+# The ‘automatic-.*’ is hook so we can automatically deploy from different branches.
+# Usually we deploy automatically after a pull-request is merged to master.
+    branch: [master, /automatic-.*/]
+# This is our way for setting docker cfg credentials. We set project’s environment variables with the values.
+    commands:
+      - |
+          cat > ~/.dockercfg << EOF
+          {
+              "https://index.docker.io/v1/": {
+                  "auth": "$DOCKER_AUTH",
+                  "email": "$DOCKER_EMAIL"
+              }
+          }
+          EOF
+# Sample for RoR project. Not relevant specifically to Docker.
+      - bundle package --all
+      - echo "DOCKER_IMAGE is $DOCKER_IMAGE"
+# Our Dockerfile.app is located under directory: docker-images
+      - docker build -t $DOCKER_IMAGE -f docker-images/Dockerfile.app .
+      - echo "Starting push $DOCKER_IMAGE to docker-hub”
+      - docker push $DOCKER_IMAGE
+# Calling script for uploading JSON descriptor file
+      - sh ./create_docker_run_file.sh $TAG
+# Calling script for setting new application version in AWS EB
+      - sh ./upload_image_to_elastcbeanstalk.sh $TAG
